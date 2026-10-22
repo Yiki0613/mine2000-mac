@@ -13,6 +13,13 @@ cd "$(dirname "$0")"
 
 COMMON=(--disable-sandbox)
 
+# 纯 Command Line Tools 环境需要显式挂 swift-testing 宏插件（见 Package.swift 注释）。
+# 装了完整 Xcode 的机器（含 CI runner）**不能**挂：CLT 目录依然存在，但里面是旧版
+# 插件的 dylib，塞给 Xcode 的 swift 前端会版本错配。所以按 xcode-select 实测判断。
+if [ "$(xcode-select -p 2>/dev/null)" = "/Library/Developer/CommandLineTools" ]; then
+  export MINE2000_CLT_TESTING_PLUGIN=1
+fi
+
 case "${1:-all}" in
   build)
     swift build "${COMMON[@]}"

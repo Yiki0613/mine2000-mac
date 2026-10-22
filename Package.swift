@@ -38,11 +38,17 @@ import Foundation
 // dylib。但不同机器上这个 dylib 的位置不同：
 //   · 只有 Command Line Tools：/Library/Developer/CommandLineTools/usr/lib/...
 //   · 装了完整 Xcode：          /Applications/Xcode.app/Contents/Developer/...
-// 而且**不能写死**——写死会让别人 clone 下来直接编译失败（CI 上同样必挂）。
-// 因此这里先探测文件是否存在，存在才注入；装了完整 Xcode 的机器本来就不需要它。
+//
+// 不能写死，也不能「文件存在就注入」——CI runner 上 CLT 和 Xcode 是共存的，
+// 那个路径存在，但里面是旧版插件的 dylib，塞给 Xcode 的 swift 前端会版本错配。
+// 所以改成**显式开关**：只有确认自己是纯 CLT 环境时才打开。
+// `build.sh` 会自动设置这个变量；直接跑 `swift test` 且遇到宏找不到时，
+// 手动 `export MINE2000_CLT_TESTING_PLUGIN=1` 即可。
 let cltTestingPlugin =
     "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib"
-let needsTestingPluginOverride = FileManager.default.fileExists(atPath: cltTestingPlugin)
+let needsTestingPluginOverride =
+    ProcessInfo.processInfo.environment["MINE2000_CLT_TESTING_PLUGIN"] == "1"
+    && FileManager.default.fileExists(atPath: cltTestingPlugin)
 
 var testSwiftSettings: [SwiftSetting] = [.swiftLanguageMode(.v6)]
 if needsTestingPluginOverride {
