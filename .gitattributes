@@ -1,0 +1,15 @@
+# 统一换行符，避免 Windows 贡献者提交 CRLF
+* text=auto eol=lf
+
+# 二进制资源（不要做 diff / 不要转码）
+*.bmp   binary
+*.ico   binary
+*.icns  binary
+*.png   binary
+*.dat   binary
+
+# Shell 脚本保持 LF
+*.sh    text eol=lf
+
+# 文档里的中文不做归一化处理
+*.md    text

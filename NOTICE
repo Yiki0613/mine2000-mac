@@ -1,0 +1,79 @@
+NOTICE
+======
+
+This repository contains **two kinds of material with different copyright
+status**. Please read this file before redistributing anything from it.
+
+1. Source code — MIT
+--------------------
+
+All Swift source code under `Sources/`, `Tests/`, `Tools/` and the build
+script `build.sh` is original work, licensed under the MIT License.
+See `LICENSE`.
+
+This is a **clean-room rewrite**. No machine code, disassembly listing or
+compiled binary from the original game is included or linked. The original
+program's behaviour was observed and re-implemented in Swift + AppKit from
+scratch.
+
+2. Original game assets — property of their authors
+---------------------------------------------------
+
+The following files are **verbatim copies of assets extracted from the
+original Windows game** `mine2000` v2.21. They are included here solely so
+that the project can reproduce the original look and remain format-compatible,
+and they are **NOT** covered by the MIT License:
+
+| File | Size | What it is |
+|---|---|---|
+| `Sources/Mine2000/Resources/tiles_144x81.bmp` | 35,032 B | Tile atlas: cells, digits, LED segments, faces |
+| `Sources/Mine2000/Resources/logo_170x57.bmp` | 10,868 B | Logo shown in the About dialog |
+| `Sources/Mine2000/Resources/mine2000.ico` | 894 B | Original application icon |
+| `Tests/Fixtures/hiscore.dat` | 325 B | Default high-score table (25 × "名前なし" / 99999) |
+| `docs/research/tiles/*.png` | — | PNG crops derived from the atlas above |
+
+Original game:
+
+```
+mine2000 v2.21
+Copyright (C) 1999-2005 Tomohiro Kumagai, Kazuhiro Toyama (AhoSoft)
+```
+
+All rights to these assets remain with their authors. They are used here
+without a formal license, for **interoperability and study purposes only**,
+in a non-commercial open-source project.
+
+**If you are a rights holder and object to this use, please open an issue
+and the assets will be removed promptly.** The project can still be built
+afterwards — see "Removing the assets" below.
+
+3. Removing the assets
+----------------------
+
+The repository does not ship the original installer. If you prefer a build
+with no third-party assets at all, delete the four files listed above and
+supply your own copies (any 144×81 DIB atlas of the same layout works).
+`Tools/tiles_inspect.py` and `Tools/atlas_spec.py` document the exact layout.
+
+4. Trademark
+------------
+
+"mine2000" and "AhoSoft" are used descriptively to refer to the original
+program this project is compatible with. No affiliation with, or endorsement
+by, the original authors is claimed or implied.
+
+────────────────────────────────────────────────────────────────────────────
+
+中文摘要
+--------
+
+本仓库的 **Swift 源码**（`Sources/`、`Tests/`、`Tools/`、`build.sh`）为原创，
+采用 MIT 协议。这是**净室重写**：不包含、不链接原版的任何机器码或反汇编产物。
+
+`tiles_144x81.bmp`、`logo_170x57.bmp`、`mine2000.ico`、`hiscore.dat` 四个文件
+是**原版游戏的素材原件**，版权归 Tomohiro Kumagai / Kazuhiro Toyama（AhoSoft）所有，
+**不在 MIT 协议覆盖范围内**。收录它们仅为还原原版观感、保证存档格式兼容，
+非商业用途、仅供技术学习与互操作性研究。
+
+若权利人对上述使用有异议，请提 issue，我会立即移除相关文件。
+移除后项目仍可构建（自行提供同布局的图集即可）。

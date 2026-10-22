@@ -1,0 +1,24 @@
+# ── Swift Package Manager ──
+.build/
+.swiftpm/
+Package.resolved
+
+# ── Xcode ──
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# ── macOS ──
+.DS_Store
+
+# ── 构建产物 ──
+*.app/
+*.dSYM/
+*.zip
+*.pkg
+
+# ── Python（Tools/ 下的分析脚本）──
+__pycache__/
+*.py[cod]
+.venv/
