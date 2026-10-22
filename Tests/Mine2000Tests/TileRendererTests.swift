@@ -6,6 +6,7 @@ import AppKit
 ///
 /// 图集是从 EXE `.rsrc` 段抽出的**裸 DIB**（无 BMP 文件头），
 /// 这组测试同时验证「DIB 能被正确解析」与「切块坐标与图集规格一致」。
+@MainActor
 @Suite("图集渲染")
 struct TileRendererTests {
 

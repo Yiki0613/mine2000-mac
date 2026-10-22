@@ -24,6 +24,7 @@ import Testing
 /// （`L10n.*Original` / `Difficulty.menuTitleOriginal`）不算漏改 ——
 /// 它们不显示给用户，是还原度可反查的依据。
 /// ────────────────────────────────────────────────────────────────────
+@MainActor
 @Suite("界面本地化")
 struct LocalizationTests {
 
