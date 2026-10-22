@@ -51,6 +51,9 @@ struct PressFeedbackTests {
     private final class Fixture: @unchecked Sendable {
         let board: Board
         let view: BoardView
+        // 类的初始化器**不会**继承外层 struct 的 @MainActor 隔离，
+        // 而 BoardView.init 是主线程隔离的，所以这里必须显式标注。
+        @MainActor
         init() {
             board = Board(difficulty: .beginner, generator: SeededGenerator(seed: 20261022))
             let renderer = try! TileRenderer()
