@@ -35,8 +35,18 @@ public final class BoardView: NSView {
     /// 鼠标是否当前位于棋盘范围内。
     private var mouseOnBoard = true
 
-    /// 鼠标按键是否处于按下状态。
+    /// 鼠标按键是否处于按下状态（左键或右键）。
+    ///
+    /// 只用于「惊讶」表情与悬停重绘判定，**不用于凹陷反馈** ——
+    /// 凹陷只看 `leftButtonDown`（原版的 `+0x90` 只有左键会写）。
     private var mousePressed = false
+
+    /// 左键是否按着。
+    ///
+    /// 单独一个状态，是因为**凹陷反馈只由左键触发**：
+    /// 原版 `+0x90` 只取 2（左键单按）和 3（左右同按），
+    /// 右键单按根本不写这个字段，所以右键按下时格子不凹陷，旗子照常显示。
+    private var leftButtonDown = false
 
     /// 交互回调。
     public struct Callbacks {
@@ -196,16 +206,29 @@ public final class BoardView: NSView {
     ///   - column: 格子列。
     /// - Returns: 是否画成凹陷底板。
     internal func shouldRenderPressed(row: Int, column: Int) -> Bool {
+        guard let cell = board.cell(row: row, column: column) else { return false }
+
         // 已翻开的格子不参与按压反馈（原版：按压分支在未翻开路径内）
-        if board.cell(row: row, column: column)?.isRevealed == true { return false }
+        if cell.isRevealed { return false }
+
+        // 已插旗的格子不画凹陷。
+        //
+        // 原版右键单按时**不写** `+0x90`（只有左键=2、左右同按=3），
+        // 所以插旗后格子照常显示旗子。若这里不早退，凹陷底板会把旗子盖住 ——
+        // 表现就是「右键按下去旗子反而不见了」。
+        //
+        // 左键按在已插旗的格子上同样不凹陷，与原版一致（`+0x90` 虽为 2，
+        // 但绘制分支里旗子的优先级高于按压底板）。
+        if cell.isFlagged { return false }
+
         guard let mouse = mouseCell else { return false }
 
         if bothButtonsPressed {
             // 左右同按：鼠标格及八邻（上下左右 + 对角）都凹陷
             return abs(mouse.row - row) <= 1 && abs(mouse.column - column) <= 1
         }
-        // 单键按下：仅鼠标所在的那一格凹陷
-        return mousePressed && mouse.row == row && mouse.column == column
+        // 单键按下：仅鼠标所在的那一格凹陷，且**必须是左键**
+        return leftButtonDown && mouse.row == row && mouse.column == column
     }
 
     // MARK: - 测试支持
@@ -219,15 +242,19 @@ public final class BoardView: NSView {
     ///
     /// - Parameters:
     ///   - mouseCell: 鼠标所在格（nil = 不在棋盘上）。
-    ///   - pressed: 鼠标按键是否按下。
+    ///   - pressed: 是否有鼠标键按下（决定「惊讶」表情）。
     ///   - bothButtons: 是否左右同按。
+    ///   - leftButton: 左键是否按着（决定凹陷）。省略时跟随 `pressed`，
+    ///     显式传 `false` 可模拟「只按右键」——此时不凹陷、只显示旗子。
     internal func simulatePressForTesting(
         mouseCell: (row: Int, column: Int)?,
         pressed: Bool,
-        bothButtons: Bool
+        bothButtons: Bool,
+        leftButton: Bool? = nil
     ) {
         self.mouseCell = mouseCell
         self.mousePressed = pressed
+        self.leftButtonDown = leftButton ?? pressed
         self.bothButtonsPressed = bothButtons
     }
 
@@ -257,6 +284,13 @@ public final class BoardView: NSView {
         pressedCell = target
         mouseCell = target
         mouseOnBoard = true
+        leftButtonDown = true
+        // 先按右键、再按左键 → 同样构成左右同按。
+        // 反向（先左后右）在 rightMouseDown 里处理，两边都要有，
+        // 否则「从右侧发起」能扫雷、「从左侧发起」不能。
+        if rightPressedCell != nil {
+            bothButtonsPressed = true
+        }
         notifyMouseState(pressed: true)
         needsDisplay = true
     }
@@ -265,9 +299,11 @@ public final class BoardView: NSView {
         let location = convert(event.locationInWindow, from: nil)
         let target = cell(at: location)
         pressedCell = nil
+        leftButtonDown = false
         mouseCell = target
         needsDisplay = true
-        notifyMouseState(pressed: false)
+        // 右键可能还按着，别把「有键按下」误报成 false
+        notifyMouseState(pressed: rightPressedCell != nil)
 
         guard let target else { return }
 
@@ -282,34 +318,59 @@ public final class BoardView: NSView {
         callbacks.onReveal?(target.row, target.column)
     }
 
+    /// 右键按下 —— **立即插旗**。
+    ///
+    /// 原版在 `WM_RBUTTONDOWN`（`0x404620`）里直接调标旗函数，不是等松开：
+    /// ```
+    /// 004046b3  cmp  dword ptr [esp+0x1c], 0x20   ; 鼠标在 HUD 区？
+    /// 004046b8  jl   0x4046e7                     ; 是 → 跳过
+    /// 004046ba  mov  edx, dword ptr [ebx+0x190]   ; 游戏状态
+    /// 004046c2  jle  0x4046e7                     ; ≤ 0 → 跳过
+    /// 004046c7  jg   0x4046e7                     ; > 2（胜/负）→ 跳过
+    /// 004046cd  call 0x4018d0                     ; ★ 标旗，按下即调
+    /// ```
+    /// 早前把插旗放在 `rightMouseUp`，表现就是「按下去没反应、松开才出旗」。
     public override func rightMouseDown(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)
         guard let target = cell(at: location) else { return }
         rightPressedCell = target
         mouseCell = target
         mouseOnBoard = true
-        notifyMouseState(pressed: true)
-        // 若左键也按着 → 左右同按 = 扫雷
+
+        // 左键也按着 → 左右同按 = 扫雷，此时不插旗
+        // （原版 `0x40467e test dl, 1` 判左键，命中则走状态 3 的 3×3 凹陷分支）
         if pressedCell != nil {
             bothButtonsPressed = true
+            notifyMouseState(pressed: true)
+            needsDisplay = true
+            return
         }
+
+        notifyMouseState(pressed: true)
+        callbacks.onToggleFlag?(target.row, target.column)
+        // 回调链会自己重绘，但插旗也可能被模型拒绝（已翻开 / 已结束），
+        // 这里再置一次，保证任何情况下画面都跟手。
+        needsDisplay = true
     }
 
+    /// 右键松开 —— 只收尾，不再插旗。
     public override func rightMouseUp(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)
         mouseCell = cell(at: location)
-        notifyMouseState(pressed: false)
+        rightPressedCell = nil
+        needsDisplay = true
+
         if bothButtonsPressed {
             bothButtonsPressed = false
-            rightPressedCell = nil
+            notifyMouseState(pressed: false)
             if let target = cell(at: location) {
                 callbacks.onChord?(target.row, target.column)
             }
             return
         }
-        guard let target = cell(at: location), rightPressedCell != nil else { return }
-        rightPressedCell = nil
-        callbacks.onToggleFlag?(target.row, target.column)
+
+        // 单右键：旗已在 rightMouseDown 插好（或取消），这里什么都不做
+        notifyMouseState(pressed: pressedCell != nil)
     }
 
     public override func otherMouseDown(with event: NSEvent) {
@@ -318,6 +379,47 @@ public final class BoardView: NSView {
         let location = convert(event.locationInWindow, from: nil)
         guard let target = cell(at: location) else { return }
         callbacks.onChord?(target.row, target.column)
+    }
+
+    // MARK: - 拖动
+
+    /// 左键拖动 —— 按压凹陷跟着鼠标走。
+    public override func mouseDragged(with event: NSEvent) {
+        handleDrag(event)
+    }
+
+    /// 右键拖动（左右同按时，拖动事件由后按下的右键接管）。
+    public override func rightMouseDragged(with event: NSEvent) {
+        handleDrag(event)
+    }
+
+    /// 中键拖动。
+    public override func otherMouseDragged(with event: NSEvent) {
+        handleDrag(event)
+    }
+
+    /// 拖动时更新鼠标所在格。
+    ///
+    /// ⚠️ 这条**必须单独实现**：AppKit 在鼠标键按下后只发 `*Dragged`，
+    /// **不再发 `mouseMoved`**。早前只重写了 `mouseMoved`，于是按下后拖动
+    /// 完全收不到事件，`mouseCell` 钉在按下的那一格 —— 凹陷不跟随；
+    /// 而 `mouseUp` 又按「松开位置」翻牌，造成画面与结果错位。
+    ///
+    /// 原版对应机制是 `SetCapture` / `ReleaseCapture`（`0x4084F4`/`0x4084F8`）：
+    /// 按下后捕获鼠标，拖出窗口也继续收 `WM_MOUSEMOVE` 并更新 `+0x88/+0x8C`。
+    private func handleDrag(_ event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        let target = cell(at: location)
+
+        let moved = target?.row != mouseCell?.row || target?.column != mouseCell?.column
+        mouseCell = target
+        mouseOnBoard = target != nil
+
+        if moved {
+            // 凹陷格变了 → 重绘；移出棋盘则凹陷消失
+            needsDisplay = true
+            notifyMouseState(pressed: mousePressed)
+        }
     }
 
     // MARK: - 鼠标进出

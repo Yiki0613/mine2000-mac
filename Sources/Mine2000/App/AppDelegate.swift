@@ -132,6 +132,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         }
 
         let container = NSView()
+        // 包边底色：开启 layer 支撑后填 HUD 同色，
+        // 窗口圆角处切到的就是这层底色，而不是棋盘的格子。
+        container.wantsLayer = true
+        container.layer?.backgroundColor = Self.frameColor.cgColor
         container.addSubview(hudView)
         container.addSubview(boardView)
 
@@ -156,13 +160,36 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         fitWindowToContent(recenter: true)
     }
 
+    /// 内容四周的包边宽度（pt）。
+    ///
+    /// macOS 的窗口是圆角矩形，系统标准圆角半径 **10 pt**。若让棋盘直接铺满
+    /// `contentView`，四个角上的格子会被圆角切掉（底部两角最明显，因为棋盘是浅灰；
+    /// 顶部两角其实也切了，只是藏在 HUD 的深色里看不出来）。
+    ///
+    /// 留 12 pt = 10 pt 圆角 + 2 pt 余量，圆角就落在包边底色上，格子保持完整。
+    /// 包边底色用 HUD 的 `#262626`，与顶栏连成一体，视觉上是「HUD 加厚了一圈」，
+    /// 不会多出一道分层线。
+    private static let contentInset: CGFloat = 12
+
+    /// 包边底色，与 `HUDView` 的背景色一致（实测 `#262626`）。
+    private static let frameColor = NSColor(
+        srgbRed: 38.0 / 255.0,
+        green: 38.0 / 255.0,
+        blue: 38.0 / 255.0,
+        alpha: 1.0
+    )
+
     /// 当前棋盘 + HUD 所需的理想内容尺寸。
     private func contentSizeForCurrentBoard() -> NSSize {
         let scale = max(boardView.scale, 1)
         let boardWidth = CGFloat(session.board.columns * Difficulty.cellSize * scale)
         let boardHeight = CGFloat(session.board.rows * Difficulty.cellSize * scale)
         let hudHeight = CGFloat(HUDView.height * hudView.scale)
-        return NSSize(width: boardWidth, height: boardHeight + hudHeight)
+        let inset = Self.contentInset
+        return NSSize(
+            width: boardWidth + inset * 2,
+            height: boardHeight + hudHeight + inset * 2
+        )
     }
 
     /// 把窗口尺寸调整到恰好容纳棋盘 + HUD，并把棋盘在窗口内水平居中。
@@ -197,12 +224,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         let boardWidth = CGFloat(session.board.columns * Difficulty.cellSize * boardView.scale)
         let boardHeight = CGFloat(session.board.rows * Difficulty.cellSize * boardView.scale)
         container.frame = container.bounds
-        // HUD 贴顶，横跨整个窗口宽度
-        hudView.frame = NSRect(x: 0, y: container.bounds.height - hudHeight,
-                               width: container.bounds.width, height: hudHeight)
-        // 棋盘在 HUD 下方、水平居中
-        let boardX = max(0, (container.bounds.width - boardWidth) / 2)
-        let boardY = max(0, (container.bounds.height - hudHeight - boardHeight) / 2)
+
+        // 四周留出包边，让窗口圆角落在底色上而不是格子上
+        let inset = Self.contentInset
+        let innerWidth = max(0, container.bounds.width - inset * 2)
+        let innerHeight = max(0, container.bounds.height - inset * 2)
+
+        // HUD 贴顶（距窗口上沿 inset），横跨可用宽度
+        hudView.frame = NSRect(
+            x: inset,
+            y: container.bounds.height - inset - hudHeight,
+            width: innerWidth,
+            height: hudHeight
+        )
+
+        // 棋盘在 HUD 下方、可用区域内居中
+        let boardX = inset + max(0, (innerWidth - boardWidth) / 2)
+        let boardY = inset + max(0, (innerHeight - hudHeight - boardHeight) / 2)
         boardView.frame = NSRect(x: boardX, y: boardY, width: boardWidth, height: boardHeight)
         boardView.setNeedsDisplay(boardView.bounds)
     }

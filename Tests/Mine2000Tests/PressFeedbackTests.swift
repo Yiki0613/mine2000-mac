@@ -262,6 +262,76 @@ struct PressFeedbackTests {
         #expect(!view.shouldRenderPressed(row: 0, column: 0), "鼠标不在棋盘上时不应有凹陷格")
     }
 
+    // MARK: - 拖动与右键（回归）
+
+    /// 拖动时 `mouseCell` 变化 → 凹陷必须跟着走。
+    ///
+    /// 回归背景：AppKit 在按键按下后只发 `*Dragged`，不再发 `mouseMoved`。
+    /// 早前只重写了 `mouseMoved`，导致按下后拖动收不到事件、凹陷钉在原地。
+    @Test("拖动：凹陷跟随鼠标格移动")
+    func dragMovesPressedCell() {
+        let f = makeView()
+        let view = f.view
+
+        view.simulatePressForTesting(mouseCell: (row: 3, column: 3),
+                                     pressed: true, bothButtons: false)
+        #expect(view.shouldRenderPressed(row: 3, column: 3), "按下格应凹陷")
+
+        // 拖到 (5,6)
+        view.simulatePressForTesting(mouseCell: (row: 5, column: 6),
+                                     pressed: true, bothButtons: false)
+        #expect(!view.shouldRenderPressed(row: 3, column: 3),
+                "拖走后原格不应继续凹陷")
+        #expect(view.shouldRenderPressed(row: 5, column: 6),
+                "拖到的格应凹陷")
+        #expect(!view.shouldRenderPressed(row: 4, column: 4),
+                "拖动过程中中间格不应残留凹陷")
+    }
+
+    /// 拖出棋盘 → 所有凹陷消失。
+    @Test("拖动：移出棋盘后凹陷消失")
+    func dragOffBoardClearsPressedCell() {
+        let f = makeView()
+        let view = f.view
+        view.simulatePressForTesting(mouseCell: (row: 3, column: 3),
+                                     pressed: true, bothButtons: false)
+        #expect(view.shouldRenderPressed(row: 3, column: 3), "拖动前应凹陷")
+
+        view.simulatePressForTesting(mouseCell: nil, pressed: true, bothButtons: false)
+        #expect(!view.shouldRenderPressed(row: 3, column: 3),
+                "拖出棋盘后不应有任何凹陷格")
+    }
+
+    /// 只按右键 → 不凹陷。
+    ///
+    /// 原版 `+0x90` 只有左键会写（2 = 单左键、3 = 左右同按），
+    /// 右键单按不写这个字段，所以格子照常显示旗子。
+    @Test("右键按下不凹陷（凹陷只由左键触发）")
+    func rightButtonAloneDoesNotPress() {
+        let f = makeView()
+        let view = f.view
+        view.simulatePressForTesting(mouseCell: (row: 3, column: 3),
+                                     pressed: true,
+                                     bothButtons: false,
+                                     leftButton: false)
+        #expect(!view.shouldRenderPressed(row: 3, column: 3),
+                "右键单按不写 +0x90，不应出现凹陷底板")
+    }
+
+    /// 已插旗的格子即使左键按着也不凹陷，否则旗子会被底板盖住。
+    @Test("已插旗的格子不凹陷，旗子保持可见")
+    func flaggedCellNotPressed() {
+        let f = makeView()
+        let view = f.view
+        _ = f.board.toggleFlag(row: 3, column: 3)
+        #expect(f.board.cell(row: 3, column: 3)?.isFlagged == true, "前提：该格已插旗")
+
+        view.simulatePressForTesting(mouseCell: (row: 3, column: 3),
+                                     pressed: true, bothButtons: false)
+        #expect(!view.shouldRenderPressed(row: 3, column: 3),
+                "插旗格不应被凹陷底板盖住")
+    }
+
     // MARK: - 辅助
 
     /// 取 RGBA 缓冲中某点的颜色。
